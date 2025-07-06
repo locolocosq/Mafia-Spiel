@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mafia Spiel</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #0a1e40;
+      color: #ffffff;
+      text-align: center;
+      padding: 20px;
+      margin: 0;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin: 10px auto;
+      font-size: 1.2em;
+      color: white;
+    }
+
+    input[type="number"], input[type="text"] {
+      padding: 10px;
+      width: 80%;
+      max-width: 300px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background-color: #f0f0f0;
+      color: #000000;
+      font-size: 1.1em;
+      margin-bottom: 10px;
+    }
+
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 1.1em;
+      border: 2px solid white;
+      border-radius: 10px;
+      background-color: white;
+      color: black;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #e0e0e0;
+    }
+
+    #rolleAnzeigen, .rolleText {
+      font-size: 1.2em;
+      margin-top: 10px;
+      font-weight: bold;
+      color: #ffff00;
+    }
+
+    .spielerBox {
+      background-color: #1a2b50;
+      margin: 10px auto;
+      padding: 15px;
+      border-radius: 12px;
+      max-width: 300px;
+    }
+
+    #siegNachricht {
+      font-size: 1.4em;
+      font-weight: bold;
+      color: #00ffcc;
+      margin-top: 20px;
+    }
+
+    #counterBox {
+      margin-top: 20px;
+      font-size: 1.1em;
+      color: #ffffff;
+    }
+
+    @media (max-width: 600px) {
+      button, input[type="number"], input[type="text"] {
+        width: 90%;
+        max-width: 300px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="setup">
+    <h2>Mafia Spiel starten</h2>
+    <label>Spieleranzahl:</label>
+    <input type="number" id="spielerAnzahl" min="3" max="20" onchange="zeigeNamensEingabe()">
+
+    <label>Mafiaanzahl:</label>
+    <input type="number" id="mafiaAnzahl" min="1">
+
+    <div id="namenEingabeFelder"></div>
+
+    <button onclick="spielStarten()">Start</button>
+  </div>
+
+  <div id="spiel" style="display:none;">
+    <h2 id="spielerTitel"></h2>
+    <button id="rolleButton"
+      onmousedown="zeigeRolle()"
+      onmouseup="versteckeRolle()"
+      ontouchstart="zeigeRolle()"
+      ontouchend="versteckeRolle()">
+      Aufdecken
+    </button>
+    <p id="rolleAnzeigen" style="display:none;"></p>
+    <button id="weiterButton" onclick="naechsterSpieler()" disabled>Weiter</button>
+  </div>
+
+  <div id="ende" style="display:none;">
+    <h2>Fertig! Alle Rollen verteilt!</h2>
+    <div id="alleRollenAnzeigen"></div>
+    <div id="counterBox"></div>
+    <p id="siegNachricht"></p>
+    <button onclick="nochmalSpielen()">Neue Runde (andere Rollen)</button>
+  </div>
+
+  <script>
+    let spieler = [];
+    let mafiaAnzahl = 0;
+    let aktuelleRollen = [];
+    let aktuellerIndex = 0;
+    let rolleBereitsGezeigt = false;
+    let offeneRollen = new Set();
+
+    function zeigeNamensEingabe() {
+      const anzahl = parseInt(document.getElementById("spielerAnzahl").value);
+      const container = document.getElementById("namenEingabeFelder");
+      container.innerHTML = "";
+
+      for (let i = 1; i <= anzahl; i++) {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = "Name Spieler " + i;
+        input.required = true;
+        input.id = "spielerName_" + i;
+        container.appendChild(input);
+      }
+    }
+
+    function spielStarten() {
+      const spielerZahl = parseInt(document.getElementById("spielerAnzahl").value);
+      mafiaAnzahl = parseInt(document.getElementById("mafiaAnzahl").value);
+
+      if (mafiaAnzahl >= spielerZahl || mafiaAnzahl < 1 || spielerZahl < 3) {
+        alert("Ungültige Eingaben.");
+        return;
+      }
+
+      spieler = [];
+      for (let i = 1; i <= spielerZahl; i++) {
+        const name = document.getElementById("spielerName_" + i).value.trim();
+        if (name === "") {
+          alert("Bitte gib für alle Spieler Namen ein.");
+          return;
+        }
+        spieler.push(name);
+      }
+
+      neueRollenVerteilen();
+
+      document.getElementById("setup").style.display = "none";
+      document.getElementById("spiel").style.display = "block";
+      aktuellerIndex = 0;
+      zeigeAktuellenSpieler();
+    }
+
+    function neueRollenVerteilen() {
+      const gemischt = [...spieler];
+      gemischt.sort(() => Math.random() - 0.5);
+      const mafia = gemischt.slice(0, mafiaAnzahl);
+      aktuelleRollen = spieler.map(name => {
+        return {
+          name: name,
+          rolle: mafia.includes(name) ? "Mafia" : "Bürger",
+          kollegen: mafia.includes(name) ? mafia.filter(m => m !== name) : []
+        };
+      });
+    }
+
+    function zeigeAktuellenSpieler() {
+      rolleBereitsGezeigt = false;
+      document.getElementById("rolleButton").disabled = false;
+      document.getElementById("weiterButton").disabled = true;
+      const spielerName = aktuelleRollen[aktuellerIndex].name;
+      document.getElementById("spielerTitel").textContent = spielerName + ", schau dir deine Rolle an!";
+      document.getElementById("rolleAnzeigen").style.display = "none";
+    }
+
+    function zeigeRolle() {
+      if (rolleBereitsGezeigt) return;
+
+      const rolleInfo = aktuelleRollen[aktuellerIndex];
+      let text = rolleInfo.rolle === "Mafia"
+        ? "Du bist Mafia." + (rolleInfo.kollegen.length > 0 ? " Deine Kollegen: " + rolleInfo.kollegen.join(", ") : "")
+        : "Du bist Bürger.";
+
+      const p = document.getElementById("rolleAnzeigen");
+      p.textContent = text;
+      p.style.display = "block";
+
+      rolleBereitsGezeigt = true;
+      document.getElementById("rolleButton").disabled = true;
+      document.getElementById("weiterButton").disabled = false;
+    }
+
+    function versteckeRolle() {}
+
+    function naechsterSpieler() {
+      aktuellerIndex++;
+      if (aktuellerIndex >= spieler.length) {
+        document.getElementById("spiel").style.display = "none";
+        document.getElementById("ende").style.display = "block";
+        zeigeAlleSpielerRollenButtons();
+      } else {
+        zeigeAktuellenSpieler();
+      }
+    }
+
+    function zeigeAlleSpielerRollenButtons() {
+      const container = document.getElementById("alleRollenAnzeigen");
+      container.innerHTML = "";
+
+      aktuelleRollen.forEach((spieler, index) => {
+        const box = document.createElement("div");
+        box.className = "spielerBox";
+
+        const name = document.createElement("h3");
+        name.textContent = spieler.name;
+
+        const rolleText = document.createElement("p");
+        rolleText.className = "rolleText";
+        rolleText.style.display = "none";
+
+        const btn = document.createElement("button");
+        btn.textContent = "Aufdecken";
+        btn.onclick = () => {
+          rolleText.textContent = spieler.rolle;
+          rolleText.style.display = "block";
+          btn.disabled = true;
+          offeneRollen.add(index);
+          pruefeSiegBedingung();
+        };
+
+        box.appendChild(name);
+        box.appendChild(btn);
+        box.appendChild(rolleText);
+        container.appendChild(box);
+      });
+    }
+
+    function pruefeSiegBedingung() {
+      let mafiaOffen = 0;
+      let mafiaGesamt = 0;
+      let buergerOffen = 0;
+      let buergerGesamt = 0;
+
+      aktuelleRollen.forEach((spieler, index) => {
+        if (spieler.rolle === "Mafia") mafiaGesamt++;
+        if (spieler.rolle === "Bürger") buergerGesamt++;
+        if (offeneRollen.has(index)) {
+          if (spieler.rolle === "Mafia") mafiaOffen++;
+          if (spieler.rolle === "Bürger") buergerOffen++;
+        }
+      });
+
+      const mafiaUebrig = mafiaGesamt - mafiaOffen;
+      const buergerUebrig = buergerGesamt - buergerOffen;
+
+      document.getElementById("counterBox").textContent =
+        `Mafia: ${mafiaOffen}/${mafiaGesamt} | Bürger: ${buergerOffen}/${buergerGesamt}`;
+
+      const siegText = document.getElementById("siegNachricht");
+
+      if (mafiaOffen === mafiaGesamt) {
+        siegText.textContent = "Die Mafia hat verloren!";
+      } else if (buergerGesamt - buergerOffen === mafiaUebrig) {
+        siegText.textContent = "Die Mafia hat gewonnen!";
+      } else {
+        siegText.textContent = "";
+      }
+    }
+
+    function nochmalSpielen() {
+      neueRollenVerteilen();
+      aktuellerIndex = 0;
+      offeneRollen.clear();
+      document.getElementById("alleRollenAnzeigen").innerHTML = "";
+      document.getElementById("siegNachricht").textContent = "";
+      document.getElementById("counterBox").textContent = "";
+      document.getElementById("ende").style.display = "none";
+      document.getElementById("spiel").style.display = "block";
+      zeigeAktuellenSpieler();
+    }
+  </script>
+
+</body>
+</html>
